@@ -1,0 +1,8 @@
+﻿################################################################################
+# This .gitignore file was automatically created by Microsoft(R) Visual Studio.
+################################################################################
+
+/.vs
+/RecentChangesDiscord/bin/Debug/net9.0
+/RecentChangesDiscord/obj
+/RecentChangesDiscord/webhook.txt
