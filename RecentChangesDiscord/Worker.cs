@@ -18,8 +18,6 @@ namespace RecentChangesDiscord
 		private long _latestRcid = 0;
 		private bool firstRun = true;
 
-		//TODO don't put this here!
-
 		private string webhookUrl = File.ReadAllText("webhook.txt").Trim();
 
 		public Worker(ILogger<Worker> logger)
