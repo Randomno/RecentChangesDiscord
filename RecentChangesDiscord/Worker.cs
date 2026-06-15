@@ -18,12 +18,15 @@ namespace RecentChangesDiscord
 		private long _latestRcid = 0;
 		private bool firstRun = true;
 
-		private string webhookUrl = File.ReadAllText("webhook.txt").Trim();
+		private readonly string webhookUrl = File.ReadAllText("webhook.txt").Trim();
+		private readonly string wikiUrl = File.ReadAllText("wiki.txt").Trim();
+		private readonly string wikiRoot;
 
 		public Worker(ILogger<Worker> logger)
         {
             _logger = logger;
 			_http.DefaultRequestHeaders.UserAgent.ParseAdd("RecentChangesDiscord/1.0");
+			wikiRoot = new Uri(wikiUrl).GetLeftPart(UriPartial.Authority);
 		}
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -35,7 +38,7 @@ namespace RecentChangesDiscord
 				try
 				{
 					wikiResponse = await _http.GetFromJsonAsync<WikiResponse>(
-						"https://commons.wikimedia.org/w/api.php?action=query&format=json&list=recentchanges&rclimit=50&rcprop=title|timestamp|user|comment|loginfo|ids",
+						wikiUrl + "/api.php?action=query&format=json&list=recentchanges&rclimit=50&rcprop=title|timestamp|user|comment|loginfo|ids",
 						JsonConfig.Options, stoppingToken);
 				}
 				catch (OperationCanceledException)
@@ -69,24 +72,26 @@ namespace RecentChangesDiscord
 						continue;
 
 					_latestRcid = rc.Rcid;
-					
+					string escTitle = Uri.EscapeDataString(rc.Title!);
+
+
 					string message = "";
 					switch (rc.Type, rc.LogType, rc.LogAction)
 					{
 						case ("edit", _, _):
-							message += $"{rc.User} edited page {rc.Title}";
+							message += $"{rc.User} edited page [{rc.Title}]({wikiUrl}/index.php?diff={rc.RevId})";
 							break;
 						case ("new", _, _):
-							message += $"{rc.User} created page {rc.Title}";
+							message += $"{rc.User} created page [{rc.Title}]({wikiRoot}/wiki/{escTitle})";
 							break;
 						case ("log", "upload", "upload"):
-							message += $"{rc.User} uploaded {rc.Title}";
+							message += $":new: {rc.User} uploaded [{rc.Title}]({wikiRoot}/wiki/{escTitle})";
 							break;
 						case ("log", "upload", "overwrite"):
-							message += $"{rc.User} uploaded a new version of {rc.Title}";
+							message += $"{rc.User} uploaded a new version of [{rc.Title}]({wikiRoot}/wiki/{escTitle})";
 							break;
 						case ("log", "upload", "revert"):
-							message += $"{rc.User} reverted {rc.Title} to an old version";
+							message += $"{rc.User} reverted [{rc.Title}]({wikiRoot}/wiki/{escTitle}) to an old version";
 							break;
 						case ("log", "delete", _):
 							message += $"{rc.User} deleted page {rc.Title}";
@@ -94,19 +99,28 @@ namespace RecentChangesDiscord
 						case ("categorize", _, _):
 							continue;
 						default:
-							message += $"{rc.User} edited page {rc.Title} [unknown: {rc.Type}/{rc.LogType}/{rc.LogAction}]";
+							_logger.LogInformation("unknown log type: {type}, {logtype}, {logaction}", rc.Type, rc.LogType, rc.LogAction);
+							message += $"{rc.User} edited page [{rc.Title}]({wikiRoot}/wiki/{escTitle})";
 							break;
 					}
-					if (!string.IsNullOrEmpty(rc.Comment))
+
+					if (!string.IsNullOrEmpty(rc.LogParams?.ImgSha1))
 					{
-						message += $" ({rc.Comment})";
+						message += $"\n-# {rc.LogParams.ImgSha1}";
 					}
 
-					message += $" -- {rc.Rcid}";
+					if (!string.IsNullOrEmpty(rc.Comment))
+					{
+						message += $"\n`{rc.Comment}`";
+					}
 
-					Console.WriteLine(message + "\n");
 
-					var webhookResponse = await _http.PostAsJsonAsync(webhookUrl, new { content = message }, stoppingToken);
+					// message += $" -- {rc.Rcid}";
+
+					// _logger.LogTrace("{message}\n", message);
+
+					// flag 4 = suppress embeds
+					var webhookResponse = await _http.PostAsJsonAsync(webhookUrl, new { content = message, flags = 4 }, stoppingToken);
 					if (!webhookResponse.IsSuccessStatusCode) 
 						_logger.LogWarning("Webhook POST failed: {status}", webhookResponse.StatusCode);
 

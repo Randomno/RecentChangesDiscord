@@ -19,6 +19,7 @@ namespace RecentChangesDiscord
 	{
 		public string? Type { get; set; }
 		public string? Title { get; set; }
+		public long RevId { get; set; }
 		public long Rcid { get; set; }
 		public string? User { get; set; }
 		public string? Comment { get; set; }
