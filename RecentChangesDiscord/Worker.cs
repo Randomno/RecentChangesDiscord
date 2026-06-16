@@ -18,14 +18,27 @@ namespace RecentChangesDiscord
 		private long _latestRcid = 0;
 		private bool firstRun = true;
 
-		private readonly string webhookUrl = File.ReadAllText("webhook.txt").Trim();
-		private readonly string wikiUrl = File.ReadAllText("wiki.txt").Trim();
+		private readonly string webhookUrl;
+		private readonly string wikiUrl;
+		private readonly int timeout = 30000;
 		private readonly string wikiRoot;
 
 		public Worker(ILogger<Worker> logger)
         {
             _logger = logger;
 			_http.DefaultRequestHeaders.UserAgent.ParseAdd("RecentChangesDiscord/1.0");
+
+			if (!File.Exists("webhook.txt"))
+				throw new FileNotFoundException("webhook.txt not found next to the executable. Create it with the Discord webhook URL.");
+			if (!File.Exists("wiki.txt"))
+				throw new FileNotFoundException("wiki.txt not found next to the executable. Create it with the wiki base URL (e.g. https://example.org/w).");
+
+			webhookUrl = File.ReadAllText("webhook.txt").Trim();
+			wikiUrl = File.ReadAllText("wiki.txt").Trim();
+
+			if (File.Exists("timeout.txt"))
+				 timeout = int.Parse(File.ReadAllText("timeout.txt").Trim());
+
 			wikiRoot = new Uri(wikiUrl).GetLeftPart(UriPartial.Authority);
 		}
 
@@ -135,7 +148,7 @@ namespace RecentChangesDiscord
 				}
 
 				
-				await Task.Delay(5000, stoppingToken);
+				await Task.Delay(timeout, stoppingToken);
 			}
         }
     }
