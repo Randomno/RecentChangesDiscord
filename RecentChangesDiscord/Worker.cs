@@ -66,6 +66,7 @@ namespace RecentChangesDiscord
 
 				if (wikiResponse?.Query?.RecentChanges is null)
 				{
+					_logger.LogInformation("recent changes response was null");
 					continue;
 				}
 				var recentChanges = wikiResponse.Query.RecentChanges;
@@ -74,19 +75,25 @@ namespace RecentChangesDiscord
 				if (firstRun)
 				{
 					_latestRcid = recentChanges[^1].Rcid;
+					_logger.LogInformation("first run, most recent change id is {rcid}", _latestRcid);
 					firstRun = false;
 					await Task.Delay(5000, stoppingToken);
 					continue;
 				}
 
+				bool newChanges = false;
+
 				foreach (var rc in recentChanges)
 				{
 					if (rc.Rcid <= _latestRcid)
+					{
 						continue;
+					}
+
+					newChanges = true;
 
 					_latestRcid = rc.Rcid;
 					string escTitle = Uri.EscapeDataString(rc.Title!);
-
 
 					string message = "";
 					switch (rc.Type, rc.LogType, rc.LogAction)
@@ -130,7 +137,7 @@ namespace RecentChangesDiscord
 
 					// message += $" -- {rc.Rcid}";
 
-					// _logger.LogTrace("{message}\n", message);
+					_logger.LogInformation("{message} -- {rcid}\n", message, rc.Rcid);
 
 					// flag 4 = suppress embeds
 					var webhookResponse = await _http.PostAsJsonAsync(webhookUrl, new { content = message, flags = 4 }, stoppingToken);
@@ -138,13 +145,11 @@ namespace RecentChangesDiscord
 						_logger.LogWarning("Webhook POST failed: {status}", webhookResponse.StatusCode);
 
 					await Task.Delay(500, stoppingToken);
+				}
 
-					/*
-					if (_logger.IsEnabled(LogLevel.Information))
-					{
-						_logger.LogInformation("Worker running at: {time}", DateTimeOffset.Now);
-					}
-					*/
+				if (!newChanges)
+				{
+					_logger.LogInformation("no new changes found");
 				}
 
 				
